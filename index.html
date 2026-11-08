@@ -1,0 +1,2127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echoes of Aetheria - Text Adventure</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #050505;
+            color: #33ff00;
+            font-family: 'VT323', monospace;
+            overflow: hidden; /* Prevent body scroll, handle scroll in game container */
+        }
+
+        /* CRT Screen Effects */
+        .crt-container {
+            position: relative;
+            box-shadow: inset 0 0 100px rgba(51, 255, 0, 0.1);
+        }
+
+        .crt-container::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 50;
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+        }
+
+        .text-glow {
+            text-shadow: 0 0 5px rgba(51, 255, 0, 0.5), 0 0 10px rgba(51, 255, 0, 0.3);
+        }
+
+        .btn-choice {
+            transition: all 0.2s ease;
+            border: 1px solid #33ff00;
+            background-color: rgba(51, 255, 0, 0.05);
+        }
+
+        .btn-choice:hover {
+            background-color: #33ff00;
+            color: #050505;
+            box-shadow: 0 0 15px #33ff00;
+            cursor: pointer;
+        }
+
+        .btn-choice:disabled {
+            border-color: #1a4d1a;
+            color: #1a4d1a;
+            background-color: transparent;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0a0a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1a4d1a;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #33ff00;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            height: 1.2em;
+            background-color: #33ff00;
+            animation: blink 1s step-end infinite;
+            vertical-align: bottom;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Checkerboard Pulse Animations */
+        @keyframes checker-pulse-1 {
+            0%, 100% { background-color: #33ff00; }
+            50% { background-color: #050505; }
+        }
+        @keyframes checker-pulse-2 {
+            0%, 100% { background-color: #050505; }
+            50% { background-color: #33ff00; }
+        }
+        .checker-1 { animation: checker-pulse-1 2.5s ease-in-out infinite; }
+        .checker-2 { animation: checker-pulse-2 2.5s ease-in-out infinite; }
+
+        /* Dim Checkerboard Background for Windows Desktop */
+        .dim-checkerboard {
+            background-color: #020802;
+            background-image: 
+                linear-gradient(45deg, #051405 25%, transparent 25%, transparent 75%, #051405 75%, #051405),
+                linear-gradient(45deg, #051405 25%, transparent 25%, transparent 75%, #051405 75%, #051405);
+            background-size: 40px 40px;
+            background-position: 0 0, 20px 20px;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex items-center justify-center p-4 sm:p-8">
+
+    <!-- Main Game Container -->
+    <div class="crt-container w-full max-w-4xl h-full max-h-[800px] border-2 border-[#33ff00] rounded-lg flex flex-col relative overflow-hidden bg-[#050505] p-6 sm:p-10">
+        
+        <!-- Header -->
+        <header class="border-b border-[#33ff00] pb-4 mb-6 flex justify-between items-end flex-shrink-0">
+            <div>
+                <h1 class="text-4xl sm:text-5xl text-glow uppercase tracking-widest">AETHERIA O.S.</h1>
+                <p class="text-xl opacity-80">System Recovery Terminal v2.4</p>
+            </div>
+            <div class="text-right text-lg opacity-80 hidden sm:flex flex-col items-end">
+                <div>STATUS: <span id="status-indicator" class="text-glow">ONLINE</span></div>
+                <button id="btn-exit-os" class="hidden text-xs mt-2 border border-[#33ff00] px-3 py-1 hover:bg-[#33ff00] hover:text-black transition-colors font-bold uppercase tracking-wider">Exit to O.S.</button>
+            </div>
+        </header>
+
+        <!-- Game Content Split Layout -->
+        <div class="flex flex-col md:flex-row gap-6 flex-grow min-h-0 relative z-10 overflow-hidden">
+            
+            <!-- NEW VISUAL AREA (Left Side) -->
+            <div id="visual-container" class="hidden md:w-1/2 flex-shrink-0 flex-col border-2 border-[#33ff00] bg-[#020502] shadow-[0_0_15px_rgba(51,255,0,0.2)] relative">
+                <canvas id="game-visual" width="800" height="800" class="w-full h-full object-contain p-4 absolute inset-0 z-10"></canvas>
+                <!-- Container for 3D Chase Minigame -->
+                <div id="three-container" class="w-full h-full absolute inset-0 z-20 hidden bg-black"></div>
+            </div>
+
+            <!-- Text & Choices Area (Right Side / Full) -->
+            <div id="text-container" class="flex-1 flex flex-col min-w-0">
+                <!-- Story Output Area -->
+                <div id="story-area" class="flex-grow overflow-y-auto mb-4 pr-4 text-2xl sm:text-3xl leading-relaxed text-glow">
+                    <!-- Text gets injected here -->
+                </div>
+
+                <!-- Choices Area -->
+                <div id="choices-area" class="flex flex-col gap-3 flex-shrink-0 min-h-[120px]">
+                    <!-- Buttons get injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ESC Menu Modal -->
+        <div id="esc-modal" class="hidden absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4">
+            <div class="border-2 border-[#33ff00] bg-[#050505] p-8 max-w-md w-full text-center shadow-[0_0_15px_#33ff00]">
+                <h2 class="text-3xl sm:text-4xl font-bold text-glow mb-4">SYSTEM PAUSED</h2>
+                <p class="text-xl sm:text-2xl mb-6">Are you sure you want to exit A.E.T.H.E.R.I.A.?</p>
+                <p class="text-2xl sm:text-3xl font-bold mb-8 text-glow">AUTO-RETURN IN: <span id="esc-timer">5</span>s</p>
+                
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button id="btn-save-exit" class="btn-choice px-6 py-3 text-xl font-bold uppercase w-full">YES / EXIT</button>
+                    <button id="btn-return" class="btn-choice px-6 py-3 text-xl font-bold uppercase w-full">RETURN</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transition Overlay -->
+        <div id="transition-overlay" class="hidden absolute inset-0 z-40 bg-transparent flex flex-col items-center justify-center overflow-hidden">
+            <div id="checker-grid" class="w-full h-full absolute inset-0 grid"></div>
+            <div id="intro-content" class="relative z-50 flex flex-col items-center justify-center opacity-0 transition-opacity duration-1000 hidden">
+                <h1 class="text-6xl sm:text-8xl font-bold text-glow bg-[#050505] text-[#33ff00] px-8 py-4 border-4 border-[#33ff00] mb-8 shadow-[0_0_20px_#33ff00]">AETHERIA</h1>
+                <button id="btn-continue-intro" class="btn-choice px-8 py-4 text-2xl sm:text-3xl font-bold uppercase bg-[#050505]">CONTINUE</button>
+            </div>
+        </div>
+
+        <!-- NEW OS SCREENS OVERLAY -->
+        <div id="extended-os-screens" class="hidden absolute inset-0 z-40 bg-[#050505] text-[#33ff00] flex flex-col">
+            
+            <!-- 1. Library / Desktop -->
+            <div id="screen-library" class="hidden flex-1 p-8">
+               <div class="cursor-pointer inline-flex flex-col items-center p-4 hover:bg-[#33ff00]/20 transition-colors" onclick="startAppLoading()">
+                   <div class="w-16 h-16 border-2 border-[#33ff00] flex items-center justify-center mb-2 bg-black shadow-[0_0_10px_#33ff00]">
+                       <span class="text-4xl">🖧</span>
+                   </div>
+                   <span class="bg-black text-[#33ff00] px-2 border border-[#33ff00]">AETHERIA_opener.12</span>
+               </div>
+            </div>
+
+            <!-- 2. App Loading (9s) -->
+            <div id="screen-loading-1" class="hidden flex-1 flex flex-col items-center justify-center p-8">
+                <div class="text-3xl mb-6 text-glow animate-pulse">LOADING MODULES...</div>
+                <div class="w-full max-w-md border-2 border-[#33ff00] h-10 p-1 shadow-[0_0_15px_#33ff00]">
+                    <div id="progress-bar-1" class="bg-[#33ff00] h-full w-0 transition-all duration-100 ease-linear"></div>
+                </div>
+            </div>
+
+            <!-- 3. Tetris Security Check -->
+            <div id="screen-tetris" class="hidden flex-1 flex flex-col items-center justify-center p-4">
+                <div class="text-2xl mb-4 text-glow text-center">SECURITY PROTOCOL INTERVENTION<br><span class="text-lg opacity-80">CLEAR 1 LINE TO BYPASS</span></div>
+                <canvas id="tetris-canvas" width="200" height="400" class="border-2 border-[#33ff00] bg-black shadow-[0_0_20px_rgba(51,255,0,0.4)]"></canvas>
+                <div class="mt-4 text-lg opacity-70">Controls: Arrow Keys to move/rotate. Space to drop.</div>
+            </div>
+
+            <!-- 4. Check Complete Text File -->
+            <div id="screen-check" class="hidden flex-1 flex items-center justify-center">
+                <div class="border-2 border-[#33ff00] bg-black p-10 shadow-[0_0_30px_#33ff00] min-w-[300px] text-center">
+                    <h2 class="text-4xl font-bold text-glow">CHECK COMPLETE.</h2>
+                </div>
+            </div>
+
+            <!-- 5. Name Input Screen -->
+            <div id="screen-name" class="hidden flex-1 flex flex-col items-center justify-center">
+                <h1 class="text-5xl mb-8 text-glow font-bold">WELCOME!</h1>
+                <p class="mb-4 text-2xl">ENTER USER DESIGNATION:</p>
+                <div class="border-b-4 border-[#33ff00] min-w-[300px] text-center text-4xl h-12 flex items-center justify-center relative bg-[#33ff00]/5">
+                    <span id="fake-input-text"></span><span class="cursor"></span>
+                </div>
+            </div>
+
+            <!-- 6. Welcome User (Typing) -->
+            <div id="screen-welcome-user" class="hidden flex-1 flex flex-col items-center justify-center text-3xl sm:text-4xl text-glow leading-loose text-center">
+                <!-- Text typed dynamically -->
+            </div>
+
+            <!-- 7. Loading User Data (12s) -->
+            <div id="screen-loading-2" class="hidden flex-1 flex flex-col items-center justify-center p-8">
+                <div class="text-3xl mb-6 text-glow animate-pulse">LOADING USER DATA...</div>
+                <div class="w-full max-w-md border-2 border-[#33ff00] h-10 p-1 shadow-[0_0_15px_#33ff00]">
+                    <div id="progress-bar-2" class="bg-[#33ff00] h-full w-0 transition-all duration-100 ease-linear"></div>
+                </div>
+            </div>
+
+            <!-- 8. Windows Desktop Environment -->
+            <div id="screen-windows" class="hidden flex-1 flex flex-col relative dim-checkerboard">
+                <!-- Desktop Icons -->
+                <div class="flex-1 p-6 flex flex-col gap-6 items-start">
+                    <div class="cursor-not-allowed flex flex-col items-center w-28 p-2 opacity-50">
+                        <span class="text-5xl mb-2">📁</span>
+                        <span class="bg-black border border-[#33ff00] px-2 text-sm">Sys_Files</span>
+                    </div>
+                    <!-- The game launcher -->
+                    <div class="cursor-pointer flex flex-col items-center w-28 p-2 hover:bg-[#33ff00]/30 transition-colors group" onclick="hideExtendedScreensAndStart()">
+                        <span class="text-5xl mb-2 group-hover:scale-110 transition-transform">🚀</span>
+                        <span class="bg-black border border-[#33ff00] px-2 text-sm text-center">Aetheria<br>Adventure</span>
+                    </div>
+                </div>
+                <!-- Taskbar -->
+                <div class="h-12 bg-[#050505] border-t-2 border-[#33ff00] flex items-center px-2 z-10 shadow-[0_-5px_15px_rgba(51,255,0,0.2)]">
+                    <button class="bg-[#33ff00] text-black font-bold px-6 py-1 h-8 flex items-center gap-2 hover:bg-white transition-colors cursor-default">
+                        <span class="text-2xl leading-none font-sans">⊞</span> START
+                    </button>
+                    <div class="ml-auto text-lg bg-black border-2 inset-2 border-[#33ff00] px-4 py-1 text-glow">
+                        <span id="win-clock">12:00 AM</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- GAME STATE ---
+        let state = {
+            hasFlashlight: false,
+            hasKeycard: false,
+            hasFuse: false,
+            powerRestored: false,
+            serverHacked: false, // New
+            hackWins: 0          // New
+        };
+
+        let typeWriterTimeout;
+        let isTyping = false;
+        let typeSound;
+        let inAdventure = false;
+        let currentSceneNoise = null;
+        
+        // Tracking variables for cheat skip cleanup
+        let cheatActivated = false;
+        let introInterval, appLoad1Interval, appLoad2Interval;
+
+        function stopSceneSound() {
+            if (currentSceneNoise) {
+                if (currentSceneNoise.stop) currentSceneNoise.stop();
+                if (currentSceneNoise.dispose) currentSceneNoise.dispose();
+                currentSceneNoise = null;
+            }
+        }
+
+        const sceneSounds = {
+            hum: () => {
+                if(Tone.context.state !== 'running') return null;
+                const noise = new Tone.Noise("brown").start();
+                const filter = new Tone.Filter(150, "lowpass").toDestination();
+                noise.connect(filter);
+                noise.volume.value = -25;
+                return noise;
+            },
+            drone: () => {
+                if(Tone.context.state !== 'running') return null;
+                const osc = new Tone.Oscillator(60, "sawtooth").start();
+                const filter = new Tone.Filter(400, "lowpass").toDestination();
+                osc.connect(filter);
+                osc.volume.value = -20;
+                return osc;
+            },
+            clank: () => {
+                if(Tone.context.state !== 'running') return null;
+                const synth = new Tone.MembraneSynth().toDestination();
+                synth.volume.value = -10;
+                synth.triggerAttackRelease("G2", "8n");
+                return null;
+            },
+            powerup: () => {
+                if(Tone.context.state !== 'running') return null;
+                const synth = new Tone.Synth({ oscillator: { type: "sawtooth" } }).toDestination();
+                synth.volume.value = -15;
+                synth.triggerAttackRelease("C2", "2n");
+                synth.frequency.rampTo("C5", 1.5);
+                return null;
+            },
+            alarm: () => {
+                if(Tone.context.state !== 'running') return null;
+                const synth = new Tone.Synth({ oscillator: { type: "square" } }).toDestination();
+                synth.volume.value = -30;
+                let high = true;
+                const loop = new Tone.Loop(time => {
+                    synth.triggerAttackRelease(high ? "C5" : "G4", "8n", time);
+                    high = !high;
+                }, "4n").start(0);
+                Tone.Transport.start();
+                return loop;
+            },
+            heartbeat: () => {
+                if(Tone.context.state !== 'running') return null;
+                const synth = new Tone.MembraneSynth().toDestination();
+                synth.volume.value = -5;
+                const loop = new Tone.Loop(time => {
+                    synth.triggerAttackRelease("C1", "8n", time);
+                    synth.triggerAttackRelease("C1", "8n", time + 0.2);
+                }, "1n").start(0);
+                Tone.Transport.start();
+                return loop;
+            },
+            run_metal: () => {
+                if(Tone.context.state !== 'running') return null;
+                
+                // Heartbeat layer
+                const hb = new Tone.MembraneSynth().toDestination();
+                hb.volume.value = -5;
+                const loopHB = new Tone.Loop(time => {
+                    hb.triggerAttackRelease("C1", "8n", time);
+                    hb.triggerAttackRelease("C1", "8n", time + 0.2);
+                }, "1n").start(0);
+
+                // Rapid footsteps layer
+                const step = new Tone.NoiseSynth({
+                    noise: { type: "pink" },
+                    envelope: { attack: 0.005, decay: 0.1, sustain: 0 }
+                }).toDestination();
+                step.volume.value = -15; // Loud enough to hear over heartbeat
+                const loopSteps = new Tone.Loop(time => {
+                    step.triggerAttackRelease("32n", time);
+                    step.triggerAttackRelease("32n", time + 0.15); // right foot
+                }, "4n").start(0);
+
+                Tone.Transport.start();
+                
+                // Return custom controller to stop both loops
+                return {
+                    stop: () => { loopHB.stop(); loopSteps.stop(); },
+                    dispose: () => { loopHB.dispose(); loopSteps.dispose(); hb.dispose(); step.dispose(); }
+                };
+            }
+        };
+
+        // --- DRAWING FUNCTIONS FOR 2D VISUALS (ENHANCED) ---
+        const drawFns = {
+            cryo: (ctx, w, h, state) => {
+                const glow = state.powerRestored ? '#ffcc00' : '#33ff00';
+                
+                // Enhanced Background Gradient
+                let bgGrad = ctx.createRadialGradient(w/2, h/2, 100, w/2, h/2, w);
+                bgGrad.addColorStop(0, state.powerRestored ? '#1a1a00' : '#051a05');
+                bgGrad.addColorStop(1, '#000000');
+                ctx.fillStyle = bgGrad; 
+                ctx.fillRect(0,0,w,h);
+                
+                ctx.shadowBlur = 20; ctx.shadowColor = glow;
+                ctx.strokeStyle = glow; ctx.lineWidth = 3;
+                
+                // Detailed Grid background
+                ctx.globalAlpha = 0.15;
+                for(let i=0; i<w; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,h); ctx.stroke(); }
+                for(let i=0; i<h; i+=40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(w,i); ctx.stroke(); }
+                ctx.globalAlpha = 1;
+
+                // Cryo Pod - More intricate
+                ctx.strokeRect(w/2 - 120, h/2 - 220, 240, 440);
+                ctx.beginPath(); ctx.arc(w/2, h/2 - 220, 120, Math.PI, 0); ctx.stroke();
+                ctx.beginPath(); ctx.arc(w/2, h/2 + 220, 120, 0, Math.PI); ctx.stroke();
+                
+                // Inner pod details with glowing tubes
+                ctx.shadowBlur = 0;
+                ctx.strokeRect(w/2 - 80, h/2 - 180, 160, 360);
+                
+                ctx.lineWidth = 1;
+                for(let i=-60; i<=60; i+=20) {
+                    ctx.beginPath(); ctx.moveTo(w/2 + i, h/2 - 180); ctx.lineTo(w/2 + i, h/2 + 180); ctx.stroke();
+                }
+
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = glow;
+                ctx.font = '45px "VT323", monospace';
+                ctx.textAlign = "center";
+                ctx.fillText("CRYO-01", w/2, h/2 - 40);
+                
+                ctx.font = '30px "VT323", monospace';
+                if(state.powerRestored) ctx.fillText("SYSTEM: ONLINE - LIFE SUPPORT STABLE", w/2, h/2 + 40);
+                else ctx.fillText("SYSTEM: OFFLINE - CRITICAL ERROR", w/2, h/2 + 40);
+                ctx.textAlign = "left";
+            },
+            locker: (ctx, w, h, state) => {
+                const glow = state.powerRestored ? '#ffcc00' : '#33ff00';
+                ctx.fillStyle = '#050505'; ctx.fillRect(0,0,w,h);
+                ctx.strokeStyle = glow; ctx.lineWidth = 4;
+                ctx.shadowBlur = 15; ctx.shadowColor = glow;
+
+                // Locker Body
+                ctx.strokeRect(w/2 - 140, h/2 - 280, 280, 560);
+                // Open Door perspective
+                ctx.beginPath(); ctx.moveTo(w/2 - 140, h/2 - 280); ctx.lineTo(w/2 - 320, h/2 - 180); ctx.lineTo(w/2 - 320, h/2 + 380); ctx.lineTo(w/2 - 140, h/2 + 280); ctx.stroke();
+                
+                // Shelf lines
+                ctx.beginPath(); ctx.moveTo(w/2 - 140, h/2 - 100); ctx.lineTo(w/2 + 140, h/2 - 100); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w/2 - 140, h/2 + 100); ctx.lineTo(w/2 + 140, h/2 + 100); ctx.stroke();
+                
+                // Vents on door
+                for(let i=0; i<6; i++) {
+                    ctx.beginPath(); ctx.moveTo(w/2 - 280, h/2 - 120 + (i*25)); ctx.lineTo(w/2 - 170, h/2 - 160 + (i*25)); ctx.stroke();
+                }
+
+                if (!state.hasFlashlight) {
+                    ctx.fillStyle = glow;
+                    ctx.shadowBlur = 30;
+                    // Flashlight detailed
+                    ctx.fillRect(w/2 - 40, h/2 - 140, 80, 25);
+                    ctx.fillRect(w/2 + 40, h/2 - 150, 30, 45);
+                    ctx.fillStyle = "#fff"; ctx.fillRect(w/2 + 65, h/2 - 145, 5, 35);
+                }
+            },
+            corridor: (ctx, w, h, state) => {
+                const glow = state.powerRestored ? '#ffcc00' : '#33ff00';
+                let grad = ctx.createLinearGradient(0, 0, 0, h);
+                grad.addColorStop(0, '#000');
+                grad.addColorStop(0.5, state.powerRestored ? '#1a1a00' : '#051a05');
+                grad.addColorStop(1, '#000');
+                ctx.fillStyle = grad; ctx.fillRect(0,0,w,h);
+                
+                ctx.strokeStyle = glow; ctx.lineWidth = 3;
+                ctx.shadowBlur = 15; ctx.shadowColor = glow;
+                
+                const vpX = w/2, vpY = h/2;
+                
+                // Perspective lines
+                ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(vpX - 80, vpY - 80); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w,0); ctx.lineTo(vpX + 80, vpY - 80); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0,h); ctx.lineTo(vpX - 80, vpY + 80); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w,h); ctx.lineTo(vpX + 80, vpY + 80); ctx.stroke();
+                
+                // End Doorway
+                ctx.fillStyle = "#000";
+                ctx.fillRect(vpX - 80, vpY - 80, 160, 160);
+                ctx.strokeRect(vpX - 80, vpY - 80, 160, 160);
+                
+                // Tunnel depth segments & floor grids
+                for(let i=1; i<=5; i++) {
+                    let offset = i * 120;
+                    let depthX = vpX - 80 - (offset * 0.7);
+                    let depthY = vpY - 80 - (offset * 0.7);
+                    let width = (vpX-depthX)*2;
+                    let height = (vpY-depthY)*2;
+                    ctx.strokeRect(depthX, depthY, width, height);
+                    
+                    // Ceiling lights
+                    ctx.beginPath(); ctx.moveTo(depthX + width*0.3, depthY); ctx.lineTo(depthX + width*0.7, depthY);
+                    ctx.lineWidth = 8; ctx.stroke(); ctx.lineWidth = 3;
+                }
+            },
+            maintenance: (ctx, w, h, state) => {
+                const glow = state.powerRestored ? '#ffcc00' : '#33ff00';
+                ctx.fillStyle = '#050505'; ctx.fillRect(0,0,w,h);
+                ctx.strokeStyle = glow; ctx.lineWidth = 4;
+                ctx.shadowBlur = 10; ctx.shadowColor = glow;
+
+                // Pipes
+                for(let i=0; i<6; i++) {
+                    ctx.beginPath(); 
+                    ctx.moveTo(0, 100 + i*120); 
+                    ctx.lineTo(w/3, 100 + i*120);
+                    ctx.lineTo(w/3 + 100, 150 + i*120);
+                    ctx.lineTo(w, 150 + i*120);
+                    ctx.stroke();
+                }
+
+                // Engine block / Toolbox area
+                ctx.fillStyle = "#0a0a0a";
+                ctx.fillRect(w/2 - 150, h - 250, 300, 250);
+                ctx.strokeRect(w/2 - 150, h - 250, 300, 250);
+                
+                ctx.beginPath(); ctx.arc(w/2, h-125, 60, 0, Math.PI*2); ctx.stroke();
+
+                if(!state.hasFuse) {
+                    // Highlight fuse in open box
+                    ctx.fillStyle = glow;
+                    ctx.shadowBlur = 30;
+                    ctx.fillRect(w/2 - 20, h - 145, 40, 40);
+                    ctx.fillStyle = "#000";
+                    ctx.font = '20px monospace';
+                    ctx.fillText("F", w/2 - 5, h - 120);
+                }
+            },
+            dark: (ctx, w, h) => {
+                ctx.fillStyle = '#000000'; ctx.fillRect(0,0,w,h);
+                ctx.shadowBlur = 40; ctx.shadowColor = '#ff0000';
+                ctx.fillStyle = '#ff0000';
+                
+                // Glowing red alien eyes - animated looking by drawing slightly offset
+                let rx = Math.random() * 10 - 5;
+                ctx.beginPath(); ctx.ellipse(w/2 - 80 + rx, h/2 - 50, 30, 10, 0.2, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(w/2 + 80 + rx, h/2 - 50, 30, 10, -0.2, 0, Math.PI*2); ctx.fill();
+            },
+            security: (ctx, w, h, state) => {
+                const glow = state.powerRestored ? '#ffcc00' : '#33ff00';
+                ctx.fillStyle = '#050505'; ctx.fillRect(0,0,w,h);
+                ctx.strokeStyle = glow; ctx.lineWidth = 3;
+                ctx.shadowBlur = 15; ctx.shadowColor = glow;
+
+                // Desk Surface
+                ctx.beginPath(); ctx.moveTo(w/2 - 350, h/2 + 100); ctx.lineTo(w/2 + 350, h/2 + 100); ctx.lineTo(w/2 + 450, h); ctx.lineTo(w/2 - 450, h); ctx.closePath(); ctx.stroke();
+                
+                // Main Center Monitor
+                ctx.strokeRect(w/2 - 180, h/2 - 180, 360, 240);
+                
+                // Scrolling code aesthetic on side monitors
+                ctx.beginPath(); ctx.moveTo(w/2 - 200, h/2 - 150); ctx.lineTo(w/2 - 380, h/2 - 110); ctx.lineTo(w/2 - 380, h/2 + 80); ctx.lineTo(w/2 - 200, h/2 + 40); ctx.closePath(); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w/2 + 200, h/2 - 150); ctx.lineTo(w/2 + 380, h/2 - 110); ctx.lineTo(w/2 + 380, h/2 + 80); ctx.lineTo(w/2 + 200, h/2 + 40); ctx.closePath(); ctx.stroke();
+                
+                // Waveform on main monitor
+                ctx.beginPath(); 
+                ctx.moveTo(w/2 - 160, h/2 - 60); ctx.lineTo(w/2 - 80, h/2 - 60); ctx.lineTo(w/2 - 40, h/2 - 150);
+                ctx.lineTo(w/2, h/2 + 40); ctx.lineTo(w/2 + 50, h/2 - 60); ctx.lineTo(w/2 + 160, h/2 - 60);
+                ctx.stroke();
+
+                if (!state.hasKeycard) {
+                    ctx.fillStyle = glow;
+                    ctx.fillRect(w/2 - 140, h/2 + 180, 70, 45);
+                    ctx.fillStyle = "#000"; ctx.fillRect(w/2 - 130, h/2 + 195, 20, 15);
+                }
+            },
+            switch: (ctx, w, h, state) => {
+                const glow = state.powerRestored ? '#ffcc00' : '#33ff00';
+                ctx.fillStyle = '#050505'; ctx.fillRect(0,0,w,h);
+                ctx.strokeStyle = glow; ctx.lineWidth = 5;
+                ctx.shadowBlur = 20; ctx.shadowColor = glow;
+                
+                // Panel Backing
+                ctx.strokeRect(w/2 - 150, h/2 - 200, 300, 400);
+                
+                // Caution stripes
+                ctx.lineWidth = 3; ctx.globalAlpha = 0.5;
+                for(let i=-150; i<400; i+=30) {
+                    ctx.beginPath(); ctx.moveTo(w/2 - 150, h/2 - 200 + i); ctx.lineTo(w/2 + 150, h/2 - 200 + i + 60); ctx.stroke();
+                }
+                ctx.globalAlpha = 1; ctx.lineWidth = 5;
+
+                // Fuse Receptacle
+                ctx.strokeRect(w/2 - 100, h/2 + 50, 200, 100);
+                if(state.hasFuse) {
+                    ctx.fillStyle = glow;
+                    ctx.fillRect(w/2 - 80, h/2 + 65, 160, 70);
+                    ctx.fillStyle = "#000";
+                    ctx.font = '30px monospace'; ctx.fillText("FUSE LINKED", w/2 - 70, h/2 + 110);
+                } else {
+                    ctx.fillStyle = "#f00";
+                    ctx.font = '30px monospace'; ctx.fillText("MISSING FUSE", w/2 - 85, h/2 + 110);
+                }
+
+                // Lever
+                ctx.fillStyle = glow;
+                if (state.powerRestored) {
+                    ctx.fillRect(w/2 - 80, h/2 - 160, 160, 120);
+                    ctx.font = '50px "VT323", monospace'; ctx.fillStyle = "#000"; ctx.textAlign="center"; ctx.fillText("ON", w/2, h/2 - 85); ctx.textAlign="left";
+                } else {
+                    ctx.fillRect(w/2 - 80, h/2 - 80, 160, 120);
+                    ctx.font = '50px "VT323", monospace'; ctx.fillStyle = "#000"; ctx.textAlign="center"; ctx.fillText("OFF", w/2, h/2 - 5); ctx.textAlign="left";
+                }
+            },
+            medbay: (ctx, w, h, state) => {
+                const glow = state.powerRestored ? '#ffcc00' : '#33ff00';
+                ctx.fillStyle = '#050505'; ctx.fillRect(0,0,w,h);
+                ctx.strokeStyle = glow; ctx.lineWidth = 3;
+                ctx.shadowBlur = 15; ctx.shadowColor = glow;
+
+                // Operating table
+                ctx.strokeRect(w/2 - 100, h/2 - 50, 200, 300);
+                ctx.beginPath(); ctx.moveTo(w/2 - 80, h/2 - 50); ctx.lineTo(w/2 - 80, h/2 - 150); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w/2 + 80, h/2 - 50); ctx.lineTo(w/2 + 80, h/2 - 150); ctx.stroke();
+                ctx.beginPath(); ctx.arc(w/2, h/2 - 150, 80, Math.PI, 0); ctx.stroke();
+
+                // Heart rate monitor (flatline)
+                ctx.strokeRect(w/2 + 150, h/2 - 200, 200, 120);
+                ctx.beginPath();
+                ctx.moveTo(w/2 + 160, h/2 - 140);
+                ctx.lineTo(w/2 + 340, h/2 - 140);
+                ctx.strokeStyle = "#f00"; ctx.shadowColor = "#f00";
+                ctx.stroke();
+                
+                // Blood splatters (stylized)
+                ctx.fillStyle = "#800000"; ctx.shadowBlur = 5; ctx.shadowColor = "#f00";
+                for(let i=0; i<5; i++) {
+                    ctx.beginPath(); ctx.arc(w/2 - 150 + Math.random()*50, h/2 + 100 + Math.random()*50, 10 + Math.random()*20, 0, Math.PI*2); ctx.fill();
+                }
+            },
+            servers: (ctx, w, h, state) => {
+                const glow = state.powerRestored ? '#ffcc00' : '#33ff00';
+                ctx.fillStyle = '#050505'; ctx.fillRect(0,0,w,h);
+                ctx.strokeStyle = glow; ctx.lineWidth = 2;
+                ctx.shadowBlur = 10; ctx.shadowColor = glow;
+
+                // Server racks perspective
+                for (let x of [-300, -150, 150, 300]) {
+                    ctx.strokeRect(w/2 + x - 50, h/2 - 300, 100, 600);
+                    for(let y = h/2 - 280; y < h/2 + 280; y += 40) {
+                        ctx.beginPath(); ctx.moveTo(w/2 + x - 50, y); ctx.lineTo(w/2 + x + 50, y); ctx.stroke();
+                        // Blinking lights
+                        if (Math.random() > 0.5) {
+                            ctx.fillStyle = (Math.random() > 0.2) ? glow : "#f00";
+                            ctx.fillRect(w/2 + x - 30, y + 10, 10, 10);
+                        }
+                    }
+                }
+                // Terminal in middle
+                ctx.fillStyle = "#000";
+                ctx.fillRect(w/2 - 100, h/2 - 50, 200, 150);
+                ctx.strokeRect(w/2 - 100, h/2 - 50, 200, 150);
+                ctx.fillStyle = glow;
+                ctx.font = '24px monospace'; ctx.fillText(state.serverHacked ? "ACCESS: GRANTED" : "ACCESS: LOCKED", w/2 - 80, h/2 + 20);
+            },
+            reactor: (ctx, w, h, state) => {
+                const glow = state.powerRestored ? '#ffcc00' : '#33ff00';
+                ctx.fillStyle = '#050505'; ctx.fillRect(0,0,w,h);
+                ctx.strokeStyle = glow; ctx.lineWidth = 4;
+                ctx.shadowBlur = 20; ctx.shadowColor = glow;
+
+                // Core rings
+                for(let i=0; i<4; i++) {
+                    ctx.beginPath();
+                    ctx.ellipse(w/2, h/2, 200 - (i*40), 100 - (i*20), 0, 0, Math.PI*2);
+                    ctx.stroke();
+                }
+
+                // Core energy pillar
+                if (state.powerRestored) {
+                    let grad = ctx.createLinearGradient(0, h/2 - 300, 0, h/2 + 300);
+                    grad.addColorStop(0, "rgba(255, 200, 0, 0)");
+                    grad.addColorStop(0.5, "rgba(255, 200, 0, 0.8)");
+                    grad.addColorStop(1, "rgba(255, 200, 0, 0)");
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(w/2 - 60, h/2 - 300, 120, 600);
+                } else {
+                    ctx.strokeRect(w/2 - 60, h/2 - 300, 120, 600);
+                }
+
+                // Fuse terminal
+                ctx.strokeRect(w/2 - 40, h - 120, 80, 100);
+                if(state.powerRestored) {
+                    ctx.fillStyle = glow;
+                    ctx.fillRect(w/2 - 30, h - 100, 60, 60);
+                }
+            },
+            pod: (ctx, w, h, state) => {
+                const glow = state.powerRestored ? '#ffcc00' : '#33ff00';
+                ctx.fillStyle = state.powerRestored ? '#1a1a00' : '#051a05'; ctx.fillRect(0,0,w,h);
+                ctx.strokeStyle = glow; ctx.lineWidth = 5;
+                ctx.shadowBlur = 25; ctx.shadowColor = glow;
+                
+                // Octagonal Airlock Door
+                ctx.beginPath();
+                ctx.moveTo(w/2 - 100, h/2 - 250); ctx.lineTo(w/2 + 100, h/2 - 250);
+                ctx.lineTo(w/2 + 250, h/2 - 100); ctx.lineTo(w/2 + 250, h/2 + 100);
+                ctx.lineTo(w/2 + 100, h/2 + 250); ctx.lineTo(w/2 - 100, h/2 + 250);
+                ctx.lineTo(w/2 - 250, h/2 + 100); ctx.lineTo(w/2 - 250, h/2 - 100);
+                ctx.closePath(); ctx.stroke();
+
+                // Inner Window
+                ctx.beginPath(); ctx.arc(w/2, h/2, 120, 0, Math.PI*2); ctx.stroke();
+                
+                // Space/Stars outside window
+                ctx.fillStyle = "#fff"; ctx.shadowBlur = 10; ctx.shadowColor = "#fff";
+                for(let i=0; i<40; i++) {
+                    ctx.beginPath(); ctx.arc(w/2 - 90 + Math.random()*180, h/2 - 90 + Math.random()*180, Math.random()*4, 0, Math.PI*2); ctx.fill();
+                }
+
+                // Keycard Scanner
+                ctx.shadowColor = glow;
+                ctx.strokeRect(w/2 + 280, h/2 - 50, 80, 130);
+                ctx.fillStyle = glow;
+                ctx.fillRect(w/2 + 295, h/2 - 25, 50, 20);
+            },
+            success: (ctx, w, h) => {
+                ctx.fillStyle = '#000000'; ctx.fillRect(0,0,w,h);
+                ctx.fillStyle = '#ffffff'; ctx.shadowBlur = 15; ctx.shadowColor = '#fff';
+                for (let i=0; i<150; i++) {
+                    ctx.fillRect(Math.random() * w, Math.random() * h, 3 + Math.random()*3, 3 + Math.random()*3);
+                }
+                ctx.fillStyle = '#33ff00'; ctx.shadowColor = '#33ff00'; ctx.shadowBlur = 30;
+                ctx.font = '100px "VT323", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText("ESCAPED", w/2, h/2 + 30);
+                ctx.textAlign = 'left';
+            }
+        };
+
+        // --- STORY DATA ---
+        // Each node represents a scene. 
+        // text: The description.
+        // choices: Array of options. Each option needs 'text' and a 'target' scene ID. 
+        // condition: (optional) a function that must return true for the choice to appear.
+        // onEnter: (optional) a function that runs when arriving at this scene.
+        const storyNodes = {
+            boot: {
+                text: "INITIALIZING BOOT SEQUENCE...\n\nLOADING CORE MODULES: [||||||||||] 100%\nMEMORY INTEGRITY: SECURE\n\nWELCOME TO A.E.T.H.E.R.I.A.\n(Automated Extra-Terrestrial Habitat Exploration & Reconnaissance Intelligence Algorithm)\n\nSYSTEM STANDBY. WAITING FOR USER INPUT...",
+                choices: [
+                    { text: "[ENTER] TO START A.E.T.H.E.R.I.A.", target: "intro_anim" }
+                ]
+            },
+            intro_anim: {
+                text: "",
+                choices: [],
+                onEnter: runIntroAnimation
+            },
+            start: {
+                text: "SYSTEM REBOOT INITIATED...\n\nYou awaken on the cold metal floor of a dimly lit cryogenic bay. The hum of failing life support rings in your ears. Your memory is fragmented. A heavy blast door lies to the NORTH. A rusted locker sits in the corner.",
+                draw: drawFns.cryo,
+                sound: "hum",
+                onEnter: () => { 
+                    state = { hasFlashlight: false, hasKeycard: false, hasFuse: false, powerRestored: false }; 
+                },
+                choices: [
+                    { text: "Examine the rusted locker", target: "locker" },
+                    { text: "Approach the NORTH blast door", target: "hallway_entry" }
+                ]
+            },
+            locker: {
+                text: "You pry open the rusted locker. Most of the contents have decayed into dust, but a heavy-duty tactical flashlight rests on the top shelf. You take it.",
+                draw: drawFns.locker,
+                sound: "clank",
+                onEnter: () => { state.hasFlashlight = true; },
+                choices: [
+                    { text: "Return to the center of the room", target: "start_searched" }
+                ]
+            },
+            start_searched: {
+                text: "You are back in the cryogenic bay. The empty locker stands open. The heavy blast door is to the NORTH.",
+                draw: drawFns.cryo,
+                sound: "hum",
+                choices: [
+                    { text: "Approach the NORTH blast door", target: "hallway_entry" }
+                ]
+            },
+            hallway_entry: {
+                text: "You force the blast door open. It slides with a grinding screech. Beyond it lies Sector 4, plunged into absolute darkness.",
+                draw: drawFns.corridor,
+                choices: [
+                    { text: "Step into the darkness", target: "hallway_dark", condition: () => !state.hasFlashlight },
+                    { text: "Turn on your flashlight and step through", target: "hallway_lit", condition: () => state.hasFlashlight },
+                    { text: "Go back to the cryogenic bay", target: "start_searched" }
+                ]
+            },
+            hallway_dark: {
+                text: "You step blindly into the pitch-black corridor. You hear a skittering sound above you. Before your eyes can adjust, something drops from the ceiling. Sharp claws pierce the darkness.\n\nSIGNAL LOST. END OF SIMULATION.",
+                draw: drawFns.dark,
+                sound: "drone",
+                choices: [
+                    { text: "REBOOT SYSTEM", target: "start" }
+                ]
+            },
+            hallway_lit: {
+                text: "The beam of your flashlight cuts through the gloom, revealing a dilapidated maintenance corridor. Wires hang like metallic vines. To your LEFT is the Security Office. To your RIGHT is the Escape Pod bay. Straight AHEAD is a Maintenance Hatch.",
+                draw: drawFns.corridor,
+                choices: [
+                    { text: "Enter Security Office (LEFT)", target: "security_office" },
+                    { text: "Go to Escape Pod bay (RIGHT)", target: "escape_pods" },
+                    { text: "Crawl into Maintenance Hatch (AHEAD)", target: "maintenance_room" },
+                    { text: "Retreat to cryogenic bay", target: "start_searched" }
+                ]
+            },
+            maintenance_room: {
+                text: "You squeeze through the hatch into a cramped engine room. Thick pipes criss-cross the walls, leaking coolant. An open toolbag sits on a generator block.",
+                draw: drawFns.maintenance,
+                choices: [
+                    { text: "Search the toolbag", target: "get_fuse" },
+                    { text: "Crawl back to the hallway", target: "hallway_lit" }
+                ]
+            },
+            get_fuse: {
+                text: "Rummaging through the oily tools, you find an intact High-Voltage Fuse. This must be what powers the auxiliary systems.",
+                draw: drawFns.maintenance,
+                sound: "clank",
+                onEnter: () => { state.hasFuse = true; },
+                choices: [
+                    { text: "Crawl back to the hallway", target: "hallway_lit_searched_maint" }
+                ]
+            },
+            hallway_lit_searched_maint: {
+                text: "You are back in the main corridor. You have the fuse. LEFT is Security, RIGHT is the Escape Pods, AHEAD is the empty Maintenance Room.",
+                draw: drawFns.corridor,
+                choices: [
+                    { text: "Enter Security Office", target: "security_office" },
+                    { text: "Go to Escape Pod bay", target: "escape_pods" }
+                ]
+            },
+            security_office: {
+                text: "The security office is a mess of shattered monitors. A skeletal figure in a uniform slumps over the main console. A blinking red light on the desk catches your eye.",
+                draw: drawFns.security,
+                choices: [
+                    { text: "Search the desk", target: "desk_search" },
+                    { text: "Check the main console", target: "console_check" },
+                    { text: "Leave the office", target: "hallway_lit" }
+                ]
+            },
+            desk_search: {
+                text: "Amongst the debris, you find a Level-3 Override Keycard. This could be useful.",
+                draw: drawFns.security,
+                onEnter: () => { state.hasKeycard = true; },
+                choices: [
+                    { text: "Check the main console", target: "console_check" },
+                    { text: "Leave the office", target: "hallway_lit_searched" }
+                ]
+            },
+            security_office_searched: {
+                text: "You are in the ruined security office. There is nothing else of value here except the main console.",
+                draw: drawFns.security,
+                choices: [
+                    { text: "Check the main console", target: "console_check" },
+                    { text: "Leave the office", target: "hallway_lit_searched" }
+                ]
+            },
+            hallway_lit_searched: {
+                text: "You are back in the lit maintenance corridor. LEFT is Security, RIGHT is Escape Pods, AHEAD is Maintenance. There is a heavy bulkhead behind you leading to SECTOR 5.",
+                draw: drawFns.corridor,
+                choices: [
+                    { text: "Enter Security Office", target: "security_office_searched" },
+                    { text: "Go to Escape Pod bay", target: "escape_pods" },
+                    { text: "Crawl into Maintenance Hatch", target: "maintenance_room" },
+                    { text: "Approach Sector 5 Bulkhead", target: "sector_5_door" }
+                ]
+            },
+            console_check: {
+                text: "The terminal reads: 'AUXILIARY POWER DESTROYED. REROUTING FAILED.\nMAIN REACTOR (SECTOR 5) REQUIRES MANUAL FUSE LINK TO RESTORE STATION LAUNCH PROTOCOLS.'\n\nThe power switch here is completely melted. You must go deeper.",
+                draw: drawFns.security,
+                choices: [
+                    { text: "Step away", target: "security_office_searched", condition: () => state.hasKeycard },
+                    { text: "Step away", target: "security_office", condition: () => !state.hasKeycard }
+                ]
+            },
+            sector_5_door: {
+                text: "A massive blast door blocks the way to Sector 5. The keycard scanner blinks red.",
+                draw: drawFns.corridor,
+                choices: [
+                    { text: "Swipe Level-3 Keycard", target: "sector_5_corridor", condition: () => state.hasKeycard },
+                    { text: "Return to Hallway", target: "hallway_lit_searched" }
+                ]
+            },
+            sector_5_corridor: {
+                text: "The blast door slides open. Sector 5 is freezing cold. The walls are covered in a strange, resin-like substance. To the LEFT is the Medical Bay. To the RIGHT is the Server Room. Straight AHEAD are the sealed Reactor Core doors.",
+                draw: drawFns.corridor,
+                sound: "hum",
+                choices: [
+                    { text: "Enter Medical Bay (LEFT)", target: "medbay" },
+                    { text: "Enter Server Room (RIGHT)", target: "server_room" },
+                    { text: "Approach Reactor Doors (AHEAD)", target: "reactor_doors" },
+                    { text: "Go back to Sector 4", target: "hallway_lit_searched" }
+                ]
+            },
+            medbay: {
+                text: "The medical bay is a nightmare. Blood splatters coat the operating tables. You find an audio log: '...it came from the vents. It hunts by sound. If you hear the heartbeat, run.'",
+                draw: drawFns.medbay,
+                sound: "drone",
+                choices: [
+                    { text: "Leave the Medbay", target: "sector_5_corridor" }
+                ]
+            },
+            server_room: {
+                text: "Rows of humming servers fill the room. The master terminal is locked. You need to decrypt the terminal to open the Reactor Core blast doors.",
+                draw: drawFns.servers,
+                sound: "hum",
+                choices: [
+                    { text: "Attempt Decryption (Minigame)", target: "hack_minigame", condition: () => !state.serverHacked },
+                    { text: "Leave Server Room", target: "sector_5_corridor", condition: () => !state.serverHacked },
+                    { text: "Leave Server Room (Doors Unlocked)", target: "sector_5_corridor", condition: () => state.serverHacked }
+                ]
+            },
+            hack_minigame: {
+                text: "INITIALIZING DECRYPTION... \nPress [SPACEBAR] when the white slider moves inside the glowing blue target box. \nYou must succeed 3 times.",
+                draw: drawFns.servers, // We will draw the minigame on top of this in logic
+                onEnter: () => { setTimeout(startHackingGame, 1000); },
+                choices: [] // Handled by minigame logic
+            },
+            hack_fail: {
+                text: "DECRYPTION FAILED. SYSTEM LOCKOUT FOR 3 SECONDS.",
+                draw: drawFns.servers,
+                choices: [
+                    { text: "Retry Decryption", target: "hack_minigame" },
+                    { text: "Give up and leave", target: "sector_5_corridor" }
+                ]
+            },
+            hack_success: {
+                text: "DECRYPTION SUCCESSFUL.\nREACTOR CORE BLAST DOORS: OPEN.",
+                draw: drawFns.servers,
+                onEnter: () => { state.serverHacked = true; },
+                choices: [
+                    { text: "Leave Server Room", target: "sector_5_corridor" }
+                ]
+            },
+            reactor_doors: {
+                text: "The massive blast doors to the Reactor Core stand before you.",
+                draw: drawFns.corridor,
+                choices: [
+                    { text: "Enter Reactor Core", target: "reactor_core", condition: () => state.serverHacked },
+                    { text: "The doors are sealed tight", target: "sector_5_corridor", condition: () => !state.serverHacked },
+                    { text: "Step back", target: "sector_5_corridor" }
+                ]
+            },
+            reactor_core: {
+                text: "The towering Reactor Core dominates the room. It is dead quiet. A single maintenance terminal flashes: 'FUSE LINK MISSING'.",
+                draw: drawFns.reactor,
+                choices: [
+                    { text: "Insert Fuse and Restore Power", target: "power_on", condition: () => state.hasFuse },
+                    { text: "Leave Reactor Core", target: "sector_5_corridor" }
+                ]
+            },
+            power_on: {
+                text: "You slot the fuse into the core panel. The reactor roars to life! Blinding amber light fills the station.\n\nBut the noise... the noise has woken it up. A deafening shriek echoes from the vents above. IT IS HERE. RUN!",
+                draw: drawFns.reactor,
+                sound: "alarm",
+                onEnter: () => { state.powerRestored = true; },
+                choices: [
+                    { text: "SPRINT FOR THE ESCAPE PODS!", target: "chase_sequence" }
+                ]
+            },
+            chase_sequence: {
+                text: "WARNING: HOSTILE ENTITY DETECTED.\n\nUSE [LEFT ARROW] AND [RIGHT ARROW] TO DODGE DEBRIS.\nKEEP RUNNING. DO NOT LOOK BACK.",
+                draw: (ctx, w, h) => { ctx.fillStyle = '#000'; ctx.fillRect(0,0,w,h); },
+                sound: "run_metal",
+                onEnter: () => { setTimeout(start3DChase, 1500); },
+                choices: []
+            },
+            chase_fail: {
+                text: "You slammed into a piece of debris. You stumble. That's all it takes. Claws rip through the darkness and drag you screaming into the vents.\n\nSIGNAL LOST. END OF SIMULATION.",
+                draw: drawFns.dark,
+                sound: "drone",
+                choices: [
+                    { text: "TRY AGAIN", target: "chase_sequence" }
+                ]
+            },
+            hallway_lit_powered: {
+                text: "You burst through the blast doors into Sector 4! The escape pods are just ahead! The creature is right behind you!",
+                draw: drawFns.corridor,
+                sound: "alarm",
+                choices: [
+                    { text: "Rush to Escape Pod bay", target: "escape_pods" }
+                ]
+            },
+            escape_pods: {
+                text: "You arrive at the Escape Pod bay. There is one intact pod remaining. The airlock door is sealed tight with an electronic scanner beside it.",
+                draw: drawFns.pod,
+                choices: [
+                    { text: "Swipe Level-3 Keycard", target: "pod_unlocked", condition: () => state.hasKeycard },
+                    { text: "Pry the door open with your hands", target: "pod_locked" },
+                    { text: "Go back to the hallway", target: "hallway_lit", condition: () => !state.powerRestored },
+                    { text: "Go back to the hallway", target: "hallway_lit_powered", condition: () => state.powerRestored }
+                ]
+            },
+            pod_locked: {
+                text: "The reinforced steel doesn't budge a millimeter. You need proper authorization to open this.",
+                draw: drawFns.pod,
+                choices: [
+                    { text: "Step back", target: "escape_pods" }
+                ]
+            },
+            pod_unlocked: {
+                text: "The scanner beeps green. The heavy airlock doors hiss open. You step inside the cramped pod.",
+                draw: drawFns.pod,
+                sound: "clank",
+                choices: [
+                    { text: "Initiate Launch Sequence", target: "launch_sequence" }
+                ]
+            },
+            launch_sequence: {
+                text: "You slam the launch button...",
+                draw: drawFns.pod,
+                choices: [
+                    { text: "...", target: "ending_fail", condition: () => !state.powerRestored },
+                    { text: "...", target: "ending_success", condition: () => state.powerRestored }
+                ]
+            },
+            ending_fail: {
+                text: "...Nothing happens. The console flashes 'ERROR: INSUFFICIENT POWER FOR LAUNCH CLAMPS'. The skittering sounds from the vents grow louder, and the pod door slowly slides shut, locking you in the dark.\n\nSIGNAL LOST. END OF SIMULATION.",
+                draw: drawFns.dark,
+                sound: "drone",
+                choices: [
+                    { text: "REBOOT SYSTEM", target: "start" }
+                ]
+            },
+            ending_success: {
+                text: "...The pod violently shakes as the explosive bolts detonate. You are slammed into your seat as the pod shoots out into the cold void of space, leaving the doomed Aetheria station behind.\n\nYOU HAVE ESCAPED. SURVIVAL CONFIRMED.",
+                draw: drawFns.success,
+                sound: "powerup",
+                onEnter: () => {
+                    setTimeout(() => {
+                        if (inAdventure) startTwist();
+                    }, 5000);
+                },
+                choices: []
+            },
+            twist_wake: {
+                text: "SYSTEM FATAL ERROR.\n\nSIMULATION SHATTERED.\n\nYou never left the station. The desktop, the OS, the pod—it was all a hallucination induced by oxygen deprivation. You are still in Sector 4. And it is right in front of you.",
+                draw: drawFns.dark,
+                sound: "heartbeat",
+                choices: [
+                    { text: "RUN TO THE PODS!", target: "twist_chase_3d" }
+                ]
+            },
+            twist_chase_3d: {
+                text: "WARNING: REALITY COLLAPSING.\n\nUSE [LEFT ARROW] AND [RIGHT ARROW] TO DODGE ANOMALIES.\nSURVIVE.",
+                draw: (ctx, w, h) => { ctx.fillStyle = '#1a0000'; ctx.fillRect(0,0,w,h); },
+                sound: "run_metal",
+                onEnter: () => { setTimeout(() => start3DChase(true), 1500); },
+                choices: []
+            },
+            twist_chase_3d_fail: {
+                text: "An anomaly tore through you. The pain is agonizingly real. But it won't let you die yet.\n\nGET UP.",
+                draw: drawFns.dark,
+                sound: "drone",
+                choices: [
+                    { text: "KEEP RUNNING", target: "twist_chase_3d" }
+                ]
+            },
+            twist_death: {
+                text: "You reach the Escape Pod bay. The door is unlocked. You rip it open, throwing yourself inside the cramped chamber and slam the door shut!\n\nYou gasp for air, safe at last.\n\nThen you hear it. A slow, ragged breath from the shadows of the pod.\n\nIt was already inside.\n\n[ TRUE END OF SIMULATION ]",
+                draw: (ctx, w, h) => { ctx.fillStyle = '#000000'; ctx.fillRect(0,0,w,h); },
+                sound: "drone",
+                onEnter: () => {
+                    if (window.saveTrueEnding) window.saveTrueEnding();
+                    // Wait for text to type + 5 seconds of reading time, then permanently lock the game
+                    setTimeout(() => {
+                        if (window.showPermanentLockout) window.showPermanentLockout();
+                    }, 9000); 
+                },
+                choices: []
+            }
+        };
+
+        // --- ENGINE LOGIC ---
+        const storyArea = document.getElementById('story-area');
+        const choicesArea = document.getElementById('choices-area');
+
+        function startTwist() {
+            // 1. Force exit to OS desktop
+            document.getElementById('btn-exit-os').click();
+            
+            // 2. Create transparent overlay
+            const twistDiv = document.createElement('div');
+            twistDiv.id = 'twist-overlay';
+            twistDiv.className = 'absolute inset-0 z-50 pointer-events-none flex items-center justify-center';
+            twistDiv.innerHTML = '<canvas id="twist-canvas" class="w-full h-full absolute inset-0"></canvas>';
+            document.querySelector('.crt-container').appendChild(twistDiv);
+            
+            // 3. Eyes open on desktop after 2s
+            setTimeout(() => {
+                const cvs = document.getElementById('twist-canvas');
+                cvs.width = cvs.parentElement.clientWidth;
+                cvs.height = cvs.parentElement.clientHeight;
+                const ctx = cvs.getContext('2d');
+                const w = cvs.width; const h = cvs.height;
+                
+                ctx.shadowBlur = 50; ctx.shadowColor = '#ff0000'; ctx.fillStyle = '#ff0000';
+                ctx.beginPath(); ctx.ellipse(w/2 - 100, h/2 - 50, 40, 15, 0.2, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(w/2 + 100, h/2 - 50, 40, 15, -0.2, 0, Math.PI*2); ctx.fill();
+                
+                if(Tone.context.state === 'running') {
+                    const drone = new Tone.Oscillator(40, "sawtooth").start();
+                    drone.connect(new Tone.Filter(300, "lowpass").toDestination());
+                    drone.volume.value = -5;
+                    setTimeout(() => drone.stop(), 3000);
+                }
+            }, 2000);
+            
+            // 4. Claw smash after 4.5s
+            setTimeout(() => {
+                const cvs = document.getElementById('twist-canvas');
+                const ctx = cvs.getContext('2d');
+                const w = cvs.width; const h = cvs.height;
+                
+                // Black out the desktop slightly
+                ctx.fillStyle = "rgba(0,0,0,0.85)";
+                ctx.fillRect(0,0,w,h);
+
+                // Cracks
+                ctx.shadowBlur = 0; ctx.strokeStyle = "#fff"; ctx.lineWidth = 5;
+                ctx.beginPath(); ctx.moveTo(w/2, h/2); ctx.lineTo(10, 10); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w/2, h/2); ctx.lineTo(w-10, 10); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w/2, h/2); ctx.lineTo(10, h-10); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w/2, h/2); ctx.lineTo(w-10, h-10); ctx.stroke();
+                
+                // Red Claw Marks
+                ctx.strokeStyle = "#ff0000"; ctx.lineWidth = 40; ctx.shadowBlur = 40; ctx.shadowColor = "#ff0000";
+                ctx.beginPath(); ctx.moveTo(w-50, 0); ctx.lineTo(50, h); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w+50, 200); ctx.lineTo(250, h); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(w-250, -100); ctx.lineTo(-50, h-100); ctx.stroke();
+                
+                if(Tone.context.state === 'running') {
+                    const noise = new Tone.Noise("white").start();
+                    noise.connect(new Tone.Filter(2000, "highpass").toDestination());
+                    noise.volume.value = 0;
+                    setTimeout(() => noise.stop(), 500);
+                }
+            }, 4500);
+
+            // 5. Jump back to game twist after 5.5s
+            setTimeout(() => {
+                twistDiv.remove();
+                document.getElementById('extended-os-screens').classList.add('hidden');
+                document.getElementById('btn-exit-os').classList.remove('hidden');
+                stopDesktopMusic();
+                inAdventure = true;
+                renderScene('twist_wake');
+            }, 5500);
+        }
+
+        // --- 2D HACKING MINIGAME LOGIC ---
+        let hackingReqAnim;
+        function startHackingGame() {
+            const canvas = document.getElementById('game-visual');
+            const ctx = canvas.getContext('2d');
+            let sliderX = 100;
+            let sliderDir = 1;
+            let speed = 4 + (state.hackWins * 1.5); // Much slower and more forgiving
+            let playing = true;
+            let message = "";
+            let msgColor = "";
+
+            const handleHackSpace = (e) => {
+                if (e.key === ' ' && playing) {
+                    e.preventDefault();
+                    playing = false;
+                    
+                    // Greatly expanded sweet spot (300 to 500)
+                    if (sliderX > 300 && sliderX < 500) {
+                        state.hackWins++;
+                        message = "SUCCESS!";
+                        msgColor = "#33ff00";
+                        
+                        if (state.hackWins >= 3) {
+                            document.removeEventListener('keydown', handleHackSpace);
+                            setTimeout(() => {
+                                cancelAnimationFrame(hackingReqAnim);
+                                renderScene('hack_success');
+                            }, 1000); // Pause for a second so player can see "SUCCESS"
+                        } else {
+                            setTimeout(() => { 
+                                playing = true; 
+                                sliderX = 100; 
+                                message = ""; 
+                            }, 1000);
+                        }
+                    } else {
+                        message = "FAILED!";
+                        msgColor = "#ff0000";
+                        state.hackWins = 0;
+                        document.removeEventListener('keydown', handleHackSpace);
+                        
+                        setTimeout(() => {
+                            cancelAnimationFrame(hackingReqAnim);
+                            renderScene('hack_fail');
+                        }, 1000);
+                    }
+                }
+            };
+            document.addEventListener('keydown', handleHackSpace);
+
+            function loop() {
+                if(!inAdventure || storyArea.innerHTML === '') return; // Guard
+                
+                // Redraw base server room
+                drawFns.servers(ctx, canvas.width, canvas.height, state);
+                
+                // Draw Hacking UI Overlay - Made wider and clearer
+                ctx.fillStyle = "rgba(0,0,0,0.9)";
+                ctx.fillRect(80, canvas.height/2 - 120, 640, 240);
+                ctx.strokeStyle = "#33ff00"; ctx.lineWidth = 4;
+                ctx.strokeRect(80, canvas.height/2 - 120, 640, 240);
+
+                // Title & Instructions
+                ctx.fillStyle = "#33ff00";
+                ctx.font = '30px "VT323", monospace';
+                ctx.fillText(`DECRYPTION STAGE: ${state.hackWins + 1}/3`, 100, canvas.height/2 - 70);
+                ctx.font = '20px "VT323", monospace';
+                ctx.fillText("Press SPACEBAR when the white line is in the blue box.", 100, canvas.height/2 - 40);
+
+                // Sweet spot bracket (Wider and brightly colored)
+                ctx.fillStyle = "rgba(0, 150, 255, 0.3)";
+                ctx.fillRect(300, canvas.height/2, 200, 60);
+                ctx.strokeStyle = "#0096ff";
+                ctx.strokeRect(300, canvas.height/2, 200, 60);
+
+                // Slider
+                if (playing) {
+                    sliderX += speed * sliderDir;
+                    if (sliderX > 680 || sliderX < 100) sliderDir *= -1;
+                }
+                
+                ctx.fillStyle = "#fff";
+                ctx.fillRect(sliderX, canvas.height/2 - 10, 10, 80);
+
+                // Draw Success/Fail feedback message
+                if (message !== "") {
+                    ctx.fillStyle = msgColor;
+                    ctx.font = '50px "VT323", monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(message, canvas.width/2, canvas.height/2 + 100);
+                    ctx.textAlign = 'left'; // Reset alignment
+                }
+
+                hackingReqAnim = requestAnimationFrame(loop);
+            }
+            loop();
+        }
+
+        // --- 3D CHASE SEQUENCE (THREE.JS) ---
+        let chaseActive = false;
+        let chaseAnimFrame;
+        let renderer, scene, camera;
+        function start3DChase(isTwist = false) {
+            if (!inAdventure) return; // Prevent starting if player hit ESC and exited to desktop
+
+            chaseActive = true;
+            
+            // Ensure the main visual container is definitely visible
+            const visualContainer = document.getElementById('visual-container');
+            visualContainer.classList.remove('hidden');
+            visualContainer.classList.add('flex');
+
+            document.getElementById('game-visual').classList.add('hidden');
+            const container = document.getElementById('three-container');
+            container.classList.remove('hidden');
+
+            // Force layout dimensions
+            const width = container.clientWidth || visualContainer.clientWidth || 400;
+            const height = container.clientHeight || visualContainer.clientHeight || 800;
+
+            if (!renderer) {
+                scene = new THREE.Scene();
+                camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                container.appendChild(renderer.domElement);
+            }
+            
+            // Setup Scene variations based on isTwist
+            if (isTwist) {
+                scene.fog = new THREE.FogExp2(0x330000, 0.025); // Thicker red fog
+            } else {
+                scene.fog = new THREE.FogExp2(0x000000, 0.015);
+            }
+            
+            // Always update size and projection on start
+            renderer.setSize(width, height);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+
+            // Clear old objects
+            while(scene.children.length > 0){ 
+                scene.remove(scene.children[0]); 
+            }
+
+            // Create Tunnel
+            const tunnelMat = new THREE.LineBasicMaterial({ 
+                color: isTwist ? 0xff0000 : 0x33ff00, 
+                transparent: true, 
+                opacity: isTwist ? 0.4 : 0.3 
+            });
+            
+            for(let i=0; i<50; i++) {
+                // Twist gets a disorienting jagged tunnel, normal gets a box tunnel
+                const geo = isTwist ? new THREE.EdgesGeometry(new THREE.OctahedronGeometry(15)) : new THREE.EdgesGeometry(new THREE.BoxGeometry(40, 20, 20));
+                const mesh = new THREE.LineSegments(geo, tunnelMat);
+                mesh.position.z = -i * 20;
+                scene.add(mesh);
+            }
+
+            // Player Setup
+            camera.position.set(0, 0, 10);
+            let targetX = 0;
+            const obstacles = [];
+            
+            // Spawn obstacles
+            const numObstacles = isTwist ? 40 : 30; // Adjusted for shorter distance and easier density
+            const spread = isTwist ? 70 : 80; // Slightly more spaced out
+            
+            for(let i=0; i<numObstacles; i++) {
+                let geo, mat;
+                if (isTwist) {
+                    // Variety of twist obstacles (High contrast colors to pop against the red fog)
+                    const type = Math.random();
+                    if (type < 0.33) {
+                        geo = new THREE.BoxGeometry(16, 8, 4); // Wide wall to force dodging far left/right
+                        mat = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true }); // Neon Cyan
+                    } else if (type < 0.66) {
+                        geo = new THREE.OctahedronGeometry(6); // Rotating diamond
+                        mat = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true }); // Bright Yellow
+                    } else {
+                        geo = new THREE.TorusGeometry(5, 1, 8, 24); // Ring
+                        mat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }); // Pure White
+                    }
+                } else {
+                    // Standard chase obstacles
+                    geo = new THREE.BoxGeometry(8, 8, 8);
+                    mat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+                }
+
+                const obs = new THREE.Mesh(geo, mat);
+                
+                if (isTwist && geo.type === 'BoxGeometry') {
+                    // Wide walls force player to the very edge
+                    obs.position.x = (Math.random() > 0.5 ? 1 : -1) * 6;
+                } else {
+                    obs.position.x = (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 8 + 4);
+                }
+                
+                obs.position.z = -100 - (i * spread); 
+                obs.position.y = -2;
+                scene.add(obs);
+                obstacles.push(obs);
+            }
+
+            // ADD HEXAGONAL DOOR AT THE END OF THE TWIST CHASE
+            if (isTwist) {
+                // End Wall to block sight of the void
+                const endWallGeo = new THREE.PlaneGeometry(300, 300);
+                const endWallMat = new THREE.MeshBasicMaterial({ color: 0x110000, fog: false });
+                const endWall = new THREE.Mesh(endWallGeo, endWallMat);
+                endWall.position.z = -2500 - 150; // Placed just past the WIN_DISTANCE
+                scene.add(endWall);
+
+                // Neon Hexagonal door
+                const hexGeo = new THREE.EdgesGeometry(new THREE.CircleGeometry(25, 6));
+                const hexMat = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 });
+                const hexDoor = new THREE.LineSegments(hexGeo, hexMat);
+                hexDoor.rotation.z = Math.PI / 2; // Rotate so points are top/bottom
+                hexDoor.position.z = -2500 - 149;
+                hexDoor.position.y = 0;
+                scene.add(hexDoor);
+            }
+
+            const handleChaseMove = (e) => {
+                if(!chaseActive) return;
+                if(e.key === 'ArrowLeft' || e.key === 'a') targetX = -9;
+                if(e.key === 'ArrowRight' || e.key === 'd') targetX = 9;
+            };
+            document.addEventListener('keydown', handleChaseMove);
+
+            let distanceTraveled = 0;
+            const WIN_DISTANCE = 2500; // Same length for both chases now
+            const speed = isTwist ? 1.9 : 1.5; // Decreased from 2.2 to be a bit easier
+
+            function animateChase() {
+                if(!chaseActive) return;
+                chaseAnimFrame = requestAnimationFrame(animateChase);
+
+                // Move camera forward and lerp X position
+                camera.position.z -= speed;
+                camera.position.x += (targetX - camera.position.x) * (isTwist ? 0.15 : 0.1);
+                distanceTraveled += speed;
+
+                // Screen shake (monster behind you) - Reduced shake for twist
+                camera.position.y = Math.sin(Date.now() * (isTwist ? 0.03 : 0.02)) * (isTwist ? 0.8 : 0.5);
+
+                // Rotate twist anomalies
+                if (isTwist) {
+                    obstacles.forEach(obs => {
+                        obs.rotation.x += 0.05;
+                        obs.rotation.y += 0.05;
+                    });
+                }
+
+                // Move tunnel to create endless effect
+                scene.children.forEach(child => {
+                    if(child.material === tunnelMat && child.position.z > camera.position.z + 20) {
+                        child.position.z -= 1000;
+                    }
+                });
+
+                // Collision detection
+                let hit = false;
+                obstacles.forEach(obs => {
+                    let hitBoxX = (obs.geometry.type === 'BoxGeometry' && isTwist) ? 8.5 : 5; // Made the wall hitboxes a bit more forgiving
+                    if (Math.abs(obs.position.z - camera.position.z) < 5 && Math.abs(obs.position.x - camera.position.x) < hitBoxX) {
+                        hit = true;
+                    }
+                });
+
+                renderer.render(scene, camera);
+
+                if (hit) {
+                    endChase(false);
+                } else if (distanceTraveled > WIN_DISTANCE) {
+                    endChase(true);
+                }
+            }
+            animateChase();
+
+            function endChase(won) {
+                chaseActive = false;
+                document.removeEventListener('keydown', handleChaseMove);
+                cancelAnimationFrame(chaseAnimFrame);
+                container.classList.add('hidden');
+                document.getElementById('game-visual').classList.remove('hidden');
+                
+                if (isTwist) {
+                    if (won) renderScene('twist_death');
+                    else renderScene('twist_chase_3d_fail');
+                } else {
+                    if (won) renderScene('hallway_lit_powered');
+                    else renderScene('chase_fail');
+                }
+            }
+        }
+
+        function playTypingSound() {
+            if (!inAdventure) return; // Only play typing sound when strictly in the adventure game
+            if (!typeSound) {
+                // Use a soft sine wave with lower volume so it's not annoying
+                typeSound = new Tone.Synth({
+                    oscillator: { type: 'sine' },
+                    envelope: { attack: 0.005, decay: 0.05, sustain: 0, release: 0.05 }
+                }).toDestination();
+                typeSound.volume.value = -35; 
+            }
+            if (Tone.context.state === 'running') {
+                typeSound.triggerAttackRelease("C6", "128n");
+            }
+        }
+
+        function renderScene(sceneId) {
+            const scene = storyNodes[sceneId];
+            
+            // Execute any state changes on entering the scene
+            if (scene.onEnter) {
+                scene.onEnter();
+            }
+
+            if (inAdventure) {
+                stopSceneSound();
+                if (scene.sound && sceneSounds[scene.sound]) {
+                    currentSceneNoise = sceneSounds[scene.sound]();
+                }
+            }
+
+            // Clear previous content
+            storyArea.innerHTML = '';
+            choicesArea.innerHTML = '';
+            clearTimeout(typeWriterTimeout);
+
+            // Handle visual rendering and layout
+            const visualContainer = document.getElementById('visual-container');
+            const canvas = document.getElementById('game-visual');
+            if (scene.draw) {
+                visualContainer.classList.remove('hidden');
+                visualContainer.classList.add('flex');
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                scene.draw(ctx, canvas.width, canvas.height, state);
+            } else {
+                visualContainer.classList.add('hidden');
+                visualContainer.classList.remove('flex');
+            }
+
+            // Container for current text and cursor
+            const textContainer = document.createElement('div');
+            const textSpan = document.createElement('span');
+            const cursorSpan = document.createElement('span');
+            
+            cursorSpan.className = 'cursor';
+            textContainer.appendChild(textSpan);
+            textContainer.appendChild(cursorSpan);
+            storyArea.appendChild(textContainer);
+
+            // Start typing effect
+            isTyping = true;
+            typeWriter(scene.text, textSpan, 0, () => {
+                isTyping = false;
+                showChoices(scene.choices);
+            });
+        }
+
+        function typeWriter(text, element, index, callback) {
+            if (index < text.length) {
+                const char = text.charAt(index);
+                // Handle newlines gracefully in HTML
+                if (char === '\n') {
+                    element.innerHTML += '<br>';
+                } else {
+                    element.innerHTML += char;
+                    if (char.trim() !== '') playTypingSound();
+                }
+                
+                // Scroll to bottom as text types
+                storyArea.scrollTop = storyArea.scrollHeight;
+
+                // Typing speed (randomized slightly for realism)
+                let speed = Math.random() * 20 + 10; 
+                typeWriterTimeout = setTimeout(() => typeWriter(text, element, index + 1, callback), speed);
+            } else {
+                if (callback) callback();
+            }
+        }
+
+        function showChoices(choices) {
+            choices.forEach(choice => {
+                // Check if choice has a condition and if it's met
+                if (choice.condition && !choice.condition()) {
+                    return; // Skip rendering this choice
+                }
+
+                const button = document.createElement('button');
+                button.className = 'btn-choice w-full text-left p-4 text-xl sm:text-2xl font-bold uppercase';
+                button.innerText = `> ${choice.text}`;
+                
+                button.onclick = () => {
+                    if (isTyping) return; // Prevent clicking while typing
+                    renderScene(choice.target);
+                };
+
+                choicesArea.appendChild(button);
+            });
+            
+            // Scroll down to ensure choices are visible
+            storyArea.scrollTop = storyArea.scrollHeight;
+        }
+
+        async function runIntroAnimation() {
+            // Initialize Tone.js AudioContext on user interaction
+            await Tone.start();
+            
+            // Play sci-fi boot hum
+            const filter = new Tone.Filter(400, "lowpass").toDestination();
+            const synth = new Tone.FMSynth({
+                harmonicity: 2,
+                modulationIndex: 10,
+                oscillator: { type: "sawtooth" },
+                modulation: { type: "square" },
+                envelope: { attack: 0.1, decay: 0.2, sustain: 1, release: 3 }
+            }).connect(filter);
+            synth.triggerAttackRelease("C2", "2n");
+            filter.frequency.rampTo(2000, 2);
+
+            // Hide standard story/choices during animation
+            storyArea.innerHTML = '';
+            choicesArea.innerHTML = '';
+            
+            const overlay = document.getElementById('transition-overlay');
+            const grid = document.getElementById('checker-grid');
+            const content = document.getElementById('intro-content');
+            const continueBtn = document.getElementById('btn-continue-intro');
+            
+            overlay.classList.remove('hidden');
+            grid.innerHTML = ''; // Clear previous cells
+            grid.style.gridTemplateColumns = 'repeat(20, 1fr)';
+            grid.style.gridTemplateRows = 'repeat(16, 1fr)';
+            
+            content.classList.add('hidden');
+            content.classList.remove('opacity-100');
+            content.classList.add('opacity-0');
+
+            const cols = 20;
+            const rows = 16;
+            const totalCells = cols * rows;
+            
+            // Create cells
+            const cells = [];
+            for (let i = 0; i < totalCells; i++) {
+                const cell = document.createElement('div');
+                grid.appendChild(cell);
+                cells.push(cell);
+            }
+
+            let step = 0;
+            const totalSteps = (rows / 2) * cols; // 160 steps to meet in the middle
+            
+            introInterval = setInterval(() => {
+                if (step >= totalSteps) {
+                    clearInterval(introInterval);
+                    // Show AETHERIA text
+                    content.classList.remove('hidden');
+                    // Slight delay to allow display to apply before opacity transition
+                    setTimeout(() => {
+                        content.classList.remove('opacity-0');
+                        content.classList.add('opacity-100');
+                    }, 50);
+                    return;
+                }
+
+                // Top snake (Left to Right, Top to Bottom)
+                const topRow = Math.floor(step / cols);
+                const topCol = step % cols;
+                const topIndex = topRow * cols + topCol;
+                
+                // Bottom snake (Right to Left, Bottom to Top)
+                const bottomRow = (rows - 1) - Math.floor(step / cols);
+                const bottomCol = (cols - 1) - (step % cols);
+                const bottomIndex = bottomRow * cols + bottomCol;
+
+                // Checkerboard alternating classes
+                const classTop = (topRow + topCol) % 2 === 0 ? 'checker-1' : 'checker-2';
+                const classBottom = (bottomRow + bottomCol) % 2 === 0 ? 'checker-1' : 'checker-2';
+
+                cells[topIndex].classList.add(classTop);
+                cells[bottomIndex].classList.add(classBottom);
+
+                step++;
+            }, 15); // Adjust for speed. 15ms is very snappy.
+
+            continueBtn.onclick = () => {
+                overlay.classList.add('hidden');
+                showExtendedScreen('screen-library');
+            };
+        }
+
+        // --- EXTENDED OS SCREENS LOGIC ---
+        
+        let bgmSynth;
+        let bgmLoop;
+
+        function startDesktopMusic() {
+            if (!bgmSynth) {
+                bgmSynth = new Tone.Synth({
+                    oscillator: { type: 'sine' },
+                    envelope: { attack: 2, decay: 1, sustain: 0.8, release: 2 }
+                }).toDestination();
+                bgmSynth.volume.value = -12; // Keep it low and atmospheric
+            }
+            
+            if (!bgmLoop) {
+                let highNote = true;
+                bgmLoop = new Tone.Loop((time) => {
+                    let note = highNote ? "C4" : "G3";
+                    bgmSynth.triggerAttackRelease(note, "2n", time);
+                    highNote = !highNote;
+                }, "1n"); // Plays every whole note
+            }
+            
+            Tone.Transport.start();
+            bgmLoop.start(0);
+        }
+
+        function stopDesktopMusic() {
+            if (bgmLoop) {
+                bgmLoop.stop();
+            }
+        }
+
+        function showExtendedScreen(screenId) {
+            if (cheatActivated && screenId !== 'screen-windows') return; // Block pop-ups during skip
+            document.getElementById('extended-os-screens').classList.remove('hidden');
+            const screens = [
+                'screen-library', 'screen-loading-1', 'screen-tetris', 
+                'screen-check', 'screen-name', 'screen-welcome-user', 
+                'screen-loading-2', 'screen-windows'
+            ];
+            screens.forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            document.getElementById(screenId).classList.remove('hidden');
+        }
+
+        // App Loading 1 (9 seconds)
+        function startAppLoading() {
+            showExtendedScreen('screen-loading-1');
+            const bar = document.getElementById('progress-bar-1');
+            bar.style.width = '0%';
+            let progress = 0;
+            appLoad1Interval = setInterval(() => {
+                progress += (100 / (9000 / 100)); // Update every 100ms for 9s total
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(appLoad1Interval);
+                    setTimeout(initTetris, 500);
+                }
+                bar.style.width = progress + '%';
+            }, 100);
+        }
+
+        // Security Tetris Minigame
+        let tetrisInterval;
+        function initTetris() {
+            showExtendedScreen('screen-tetris');
+            const canvas = document.getElementById('tetris-canvas');
+            const ctx = canvas.getContext('2d');
+            const ROWS = 20; const COLS = 10; const BLOCK = 20;
+            let board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+            let piece = null;
+            let px = 0; let py = 0;
+
+            function draw() {
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0,0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#1a4d1a'; // Placed blocks (dim)
+                for(let r=0; r<ROWS; r++){
+                    for(let c=0; c<COLS; c++){
+                        if(board[r][c]) ctx.fillRect(c*BLOCK, r*BLOCK, BLOCK-1, BLOCK-1);
+                    }
+                }
+                
+                if(piece){
+                    ctx.fillStyle = '#33ff00'; // Falling blocks (bright)
+                    for(let r=0; r<piece.length; r++){
+                        for(let c=0; c<piece[r].length; c++){
+                            if(piece[r][c]) ctx.fillRect((px+c)*BLOCK, (py+r)*BLOCK, BLOCK-1, BLOCK-1);
+                        }
+                    }
+                }
+            }
+            
+            function spawnPiece() {
+                const SHAPES = [ [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]] ];
+                piece = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+                px = Math.floor(COLS/2) - Math.floor(piece[0].length/2);
+                py = 0;
+                if(checkCollision(px, py, piece)) {
+                    // Auto-clear board if they fail so they don't get softlocked out of the game
+                    board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+                }
+            }
+            
+            function checkCollision(x, y, shape) {
+                for(let r=0; r<shape.length; r++){
+                    for(let c=0; c<shape[r].length; c++){
+                        if(shape[r][c] && (x+c < 0 || x+c >= COLS || y+r >= ROWS || (y+r >= 0 && board[y+r][x+c]))) return true;
+                    }
+                }
+                return false;
+            }
+            
+            function lockAndCheckLines() {
+                for(let r=0; r<piece.length; r++){
+                    for(let c=0; c<piece[r].length; c++){
+                        if(piece[r][c] && py+r >= 0) board[py+r][px+c] = 1;
+                    }
+                }
+                
+                let linesCleared = 0;
+                for(let r=ROWS-1; r>=0; r--){
+                    if(board[r].every(val => val !== 0)) {
+                        board.splice(r, 1);
+                        board.unshift(Array(COLS).fill(0));
+                        linesCleared++;
+                        r++; // check same row index again
+                    }
+                }
+                
+                if(linesCleared > 0) {
+                    clearInterval(tetrisInterval);
+                    document.removeEventListener('keydown', handleTetrisKey);
+                    setTimeout(showCheckComplete, 1000);
+                } else {
+                    spawnPiece();
+                }
+            }
+            
+            function drop() {
+                if(!checkCollision(px, py+1, piece)) py++;
+                else lockAndCheckLines();
+                draw();
+            }
+            
+            const handleTetrisKey = (e) => {
+                if(!piece) return;
+                if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+                
+                if(e.key === 'ArrowLeft' && !checkCollision(px-1, py, piece)) px--;
+                if(e.key === 'ArrowRight' && !checkCollision(px+1, py, piece)) px++;
+                if(e.key === 'ArrowDown') drop();
+                if(e.key === 'ArrowUp') {
+                    const rot = piece[0].map((val, index) => piece.map(row => row[index]).reverse());
+                    if(!checkCollision(px, py, rot)) piece = rot;
+                }
+                if(e.key === ' ') {
+                    while(!checkCollision(px, py+1, piece)) py++;
+                    drop();
+                }
+                draw();
+            };
+            
+            document.addEventListener('keydown', handleTetrisKey);
+            spawnPiece();
+            tetrisInterval = setInterval(drop, 500);
+            draw();
+        }
+
+        // Check Complete text file
+        function showCheckComplete() {
+            showExtendedScreen('screen-check');
+            setTimeout(startNameInput, 2500);
+        }
+
+        // Fake Name Input Screen
+        function startNameInput() {
+            showExtendedScreen('screen-name');
+            const targetName = "J0hn_225";
+            let typedName = "";
+            document.getElementById('fake-input-text').innerText = typedName;
+            
+            const handleTyping = (e) => {
+                if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt') return;
+                
+                if (typedName.length < targetName.length) {
+                    typedName += targetName[typedName.length]; // Auto-fill next correct character
+                    document.getElementById('fake-input-text').innerText = typedName;
+                    
+                    if (typedName.length === targetName.length) {
+                        document.removeEventListener('keydown', handleTyping);
+                        setTimeout(showWelcomeUserScreen, 800); // Auto enter after brief pause
+                    }
+                }
+            };
+            document.addEventListener('keydown', handleTyping);
+        }
+
+        // Typing Welcome User Text
+        function showWelcomeUserScreen() {
+            showExtendedScreen('screen-welcome-user');
+            const container = document.getElementById('screen-welcome-user');
+            container.innerHTML = '';
+            
+            const line1 = document.createElement('div');
+            const textSpan1 = document.createElement('span');
+            const cursorSpan1 = document.createElement('span');
+            cursorSpan1.className = 'cursor';
+            line1.appendChild(textSpan1);
+            line1.appendChild(cursorSpan1);
+            container.appendChild(line1);
+
+            typeWriter("Welcome!\n", textSpan1, 0, () => {
+                cursorSpan1.remove(); // Clean up first cursor
+                
+                const line2 = document.createElement('div');
+                line2.className = 'mt-4';
+                const textSpan2 = document.createElement('span');
+                const cursorSpan2 = document.createElement('span');
+                cursorSpan2.className = 'cursor';
+                line2.appendChild(textSpan2);
+                line2.appendChild(cursorSpan2);
+                container.appendChild(line2);
+                
+                setTimeout(() => {
+                    typeWriter("J0hn_255------Entry_LVL_2.Card", textSpan2, 0, () => {
+                        setTimeout(startUserDataLoading, 3000);
+                    });
+                }, 500);
+            });
+        }
+
+        // App Loading 2 (12 seconds)
+        function startUserDataLoading() {
+            showExtendedScreen('screen-loading-2');
+            const bar = document.getElementById('progress-bar-2');
+            bar.style.width = '0%';
+            let progress = 0;
+            appLoad2Interval = setInterval(() => {
+                progress += (100 / (12000 / 100)); // Update every 100ms for 12s total
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(appLoad2Interval);
+                    setTimeout(showWindowsDesktop, 500);
+                }
+                bar.style.width = progress + '%';
+            }, 100);
+        }
+
+        // Windows-style Desktop
+        let winClockInterval;
+        function showWindowsDesktop() {
+            showExtendedScreen('screen-windows');
+            startDesktopMusic();
+            
+            // Start OS Clock
+            const updateClock = () => {
+                const now = new Date();
+                document.getElementById('win-clock').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            };
+            updateClock();
+            if(!winClockInterval) winClockInterval = setInterval(updateClock, 1000);
+        }
+
+        // Start Text Adventure
+        function hideExtendedScreensAndStart() {
+            document.getElementById('extended-os-screens').classList.add('hidden');
+            document.getElementById('btn-exit-os').classList.remove('hidden');
+            stopDesktopMusic();
+            inAdventure = true;
+            renderScene('start');
+        }
+
+        // Return to O.S. logic
+        document.getElementById('btn-exit-os').onclick = () => {
+            document.getElementById('btn-exit-os').classList.add('hidden');
+            inAdventure = false;
+            stopSceneSound();
+            
+            // Clear game view
+            storyArea.innerHTML = '';
+            choicesArea.innerHTML = '';
+            clearTimeout(typeWriterTimeout);
+            document.getElementById('visual-container').classList.add('hidden');
+            document.getElementById('visual-container').classList.remove('flex');
+            
+            showWindowsDesktop();
+        };
+
+        // --- ESC MENU LOGIC ---
+        let escTimerInterval;
+        let escTimeLeft = 5;
+
+        function showEscMenu() {
+            const modal = document.getElementById('esc-modal');
+            if (!modal.classList.contains('hidden')) return; // Already open
+            
+            modal.classList.remove('hidden');
+            escTimeLeft = 5;
+            document.getElementById('esc-timer').innerText = escTimeLeft;
+            
+            escTimerInterval = setInterval(() => {
+                escTimeLeft--;
+                if (escTimeLeft > 0) {
+                    document.getElementById('esc-timer').innerText = escTimeLeft;
+                } else {
+                    closeEscMenu();
+                }
+            }, 1000);
+        }
+
+        function closeEscMenu() {
+            clearInterval(escTimerInterval);
+            document.getElementById('esc-modal').classList.add('hidden');
+        }
+
+        document.getElementById('btn-return').onclick = closeEscMenu;
+        
+        document.getElementById('btn-save-exit').onclick = () => {
+            clearInterval(escTimerInterval);
+            document.getElementById('esc-modal').classList.add('hidden');
+            
+            if (inAdventure) {
+                // If in game, trigger the OS exit button logic
+                document.getElementById('btn-exit-os').click();
+            } else {
+                // Fallback to desktop if they manage to trigger it elsewhere
+                showExtendedScreen('screen-windows'); 
+            }
+        };
+        
+        let cheatBuffer = "";
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                showEscMenu();
+            }
+
+            // Secret skip code logic
+            if (e.key.length === 1) {
+                cheatBuffer += e.key;
+                // Keep the buffer short so it doesn't eat memory
+                if (cheatBuffer.length > 10) cheatBuffer = cheatBuffer.slice(-10);
+                
+                if (cheatBuffer.includes("E7j0hn") || cheatBuffer.includes("e7j0hn")) {
+                    cheatBuffer = "";
+                    if (!cheatActivated) activateCheatSkip();
+                }
+            }
+        });
+
+        async function activateCheatSkip() {
+            cheatActivated = true;
+            await Tone.start(); // Ensure audio engine is allowed if skipping early
+            
+            closeEscMenu(); // Hide esc modal just in case
+            
+            // Clean up any intervals/animations that might be running
+            if (typeof tetrisInterval !== 'undefined') clearInterval(tetrisInterval);
+            if (typeof hackingReqAnim !== 'undefined') cancelAnimationFrame(hackingReqAnim);
+            if (typeof introInterval !== 'undefined') clearInterval(introInterval);
+            if (typeof appLoad1Interval !== 'undefined') clearInterval(appLoad1Interval);
+            if (typeof appLoad2Interval !== 'undefined') clearInterval(appLoad2Interval);
+            
+            chaseActive = false;
+            if (typeof chaseAnimFrame !== 'undefined') cancelAnimationFrame(chaseAnimFrame);
+            
+            // Clean up overlays and reset
+            document.getElementById('transition-overlay').classList.add('hidden');
+            
+            // Force the desktop state to prep for the twist
+            document.getElementById('btn-exit-os').classList.remove('hidden');
+            document.getElementById('btn-exit-os').click(); 
+            
+            // Trigger the twist sequence
+            startTwist();
+        }
+
+        // --- PERMANENT LOCKOUT LOGIC ---
+        window.showPermanentLockout = function() {
+            // Nuke the DOM and show only the red eyes canvas
+            document.body.innerHTML = '<canvas id="lockout-canvas" class="w-full h-full absolute inset-0 z-50 bg-black"></canvas>';
+            const cvs = document.getElementById('lockout-canvas');
+            const ctx = cvs.getContext('2d');
+            
+            const resize = () => {
+                cvs.width = window.innerWidth;
+                cvs.height = window.innerHeight;
+            };
+            window.addEventListener('resize', resize);
+            resize();
+            
+            function anim() {
+                ctx.fillStyle = '#000000'; 
+                ctx.fillRect(0,0,cvs.width,cvs.height);
+                
+                ctx.shadowBlur = 40; ctx.shadowColor = '#ff0000';
+                ctx.fillStyle = '#ff0000';
+                let rx = Math.random() * 10 - 5;
+                ctx.beginPath(); ctx.ellipse(cvs.width/2 - 80 + rx, cvs.height/2 - 50, 30, 10, 0.2, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(cvs.width/2 + 80 + rx, cvs.height/2 - 50, 30, 10, -0.2, 0, Math.PI*2); ctx.fill();
+                
+                requestAnimationFrame(anim);
+            }
+            anim();
+
+            // Force aggressive audio loop
+            const startAudio = async () => {
+                if (Tone && Tone.context) {
+                    await Tone.start();
+                    const drone = new Tone.Oscillator(30, "sawtooth").start();
+                    drone.connect(new Tone.Filter(200, "lowpass").toDestination());
+                    drone.volume.value = 0; // Loud
+                }
+            };
+            
+            startAudio();
+            window.addEventListener('click', startAudio, {once: true});
+        };
+
+    </script>
+
+    <!-- FIREBASE CLOUD SAVE & AUTHENTICATION -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        
+        let db, auth, userId;
+
+        window.saveTrueEnding = async function() {
+            if (db && userId) {
+                try {
+                    const docRef = doc(db, 'artifacts', appId, 'users', userId, 'gameState', 'progress');
+                    await setDoc(docRef, { hasFinishedTrueEnding: true });
+                } catch (e) {
+                    console.error("Failed to save progress", e);
+                }
+            }
+        };
+
+        async function initCloudSaveAndBoot() {
+            if (firebaseConfig && Object.keys(firebaseConfig).length > 0) {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                try {
+                    if (typeof __initial_auth_token !== 'undefined') {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    userId = auth.currentUser.uid;
+                    
+                    // Check if player has already beaten the true ending
+                    const docRef = doc(db, 'artifacts', appId, 'users', userId, 'gameState', 'progress');
+                    const docSnap = await getDoc(docRef);
+                    
+                    if (docSnap.exists() && docSnap.data().hasFinishedTrueEnding) {
+                        if (window.showPermanentLockout) window.showPermanentLockout();
+                        return; // Halt normal game boot entirely!
+                    }
+                } catch (e) {
+                    console.error("Auth error", e);
+                }
+            }
+            
+            // If not locked out (or running completely offline without config), boot normally
+            if (typeof renderScene !== 'undefined') {
+                renderScene('boot');
+            }
+        }
+
+        // Initiate sequence
+        initCloudSaveAndBoot();
+    </script>
+</body>
+</html>
